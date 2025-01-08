@@ -71,8 +71,9 @@ def test_model(encoder_session, decoder1_session, decoder2_session, test_data, a
         w2 = decoder2_session.run(None, {decoder2_session.get_inputs()[0].name: z_w1.astype(np.float32)})[0]
 
         # Compute anomaly score
-        reconstruction_error = np.mean(np.abs(batch - w1))  # Replace this with your custom score logic
-        results.append(reconstruction_error)
+        score = (alpha * np.mean((batch - w1) ** 2, axis=1) + 
+                 beta * np.mean((batch - w2) ** 2, axis=1))
+        results.append(score)
 
     return np.array(results)
 
@@ -85,6 +86,7 @@ producer = KafkaProducer(
 
 # Load models and configurations
 encoder_session, decoder1_session, decoder2_session, scaler, thresholds = load_models_and_config()
+
 
 def process_batch(batch_df, batch_id):
     """Process each micro-batch of data from Kafka."""
@@ -123,7 +125,7 @@ def process_batch(batch_df, batch_id):
                 
                 # Prepare output data
                 output_data = data_buffer['full_data'][-1].copy()
-                #output_data['anomaly_score'] = float(anomaly_score)
+                output_data['anomaly_score'] = float(anomaly_score)  # Add the anomaly score
                 output_data['is_anomaly'] = is_anomaly
                 
                 # Send to Kafka
@@ -132,7 +134,7 @@ def process_batch(batch_df, batch_id):
 
                 print(value)
                 
-                print(f"Sending prediction - Anomaly Score: {anomaly_score:.4f}, Is Anomaly: {is_anomaly}")
+                print(f"Sending prediction - Anomaly Score: {anomaly_score}, Is Anomaly: {is_anomaly}")
                 producer.send(OUTPUT_TOPIC, key=key, value=value)
                 
                 # Remove oldest entry to slide the window
